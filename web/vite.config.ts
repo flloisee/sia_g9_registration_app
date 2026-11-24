@@ -10,5 +10,7 @@ export default defineConfig({
   },
   server: {
     proxy: { '/api': 'http://localhost:4000' },
+    // Vite blocks unknown Host headers; the localtunnel subdomain must be allowed.
+    allowedHosts: ['.loca.lt'],
   },
 });

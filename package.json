@@ -1,13 +1,22 @@
 {
   "name": "sia-g9-registration",
   "private": true,
-  "workspaces": ["server", "web"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "dev": "concurrently -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
+    "share": "npm run build && concurrently -n server,tunnel -c magenta,green \"npm:start\" \"npm:tunnel\"",
+    "tunnel": "node --env-file-if-exists=.env scripts/tunnel.mjs",
     "build": "npm run build -w web",
     "start": "npm start -w server",
     "db:migrate": "npm run db:migrate -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7",
+    "localtunnel": "^2.0.2"
   }
 }

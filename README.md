@@ -52,6 +52,16 @@ npm run build   # builds web/dist
 npm start       # serves the built app and the API on :4000
 ```
 
+To share it through localtunnel, build and start the server with the tunnel:
+
+```bash
+npm run share   # build + start on :4000 + https://<TUNNEL_SUBDOMAIN>.loca.lt
+```
+
+Use `npm run share` rather than tunnelling `npm run dev`: the Vite dev server serves dozens of
+module requests, so one dropped request through the tunnel leaves a blank page. The built app is
+a handful of requests served by Express. `npm run tunnel` starts the tunnel alone.
+
 ### Environment
 
 | Variable | Purpose |
@@ -61,6 +71,7 @@ npm start       # serves the built app and the API on :4000
 | `PORT` | API port (default `4000`). If changed, update the Vite proxy in `web/vite.config.ts`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | Email delivery |
 | `EVENT_NAME` | Name for the first event seeded by the migration |
+| `TUNNEL_SUBDOMAIN`, `TUNNEL_USE_SUBDOMAIN` | localtunnel name; set the latter to `FALSE` to accept a random URL |
 | `TRUST_PROXY` | Set to `1` behind a reverse proxy so rate limiting sees real client IPs |
 
 With no `SMTP_HOST`, mail goes to a throwaway Ethereal inbox: the preview link is printed to the

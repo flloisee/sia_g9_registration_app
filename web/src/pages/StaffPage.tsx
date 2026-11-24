@@ -51,6 +51,7 @@ export function StaffPage() {
 }
 
 function StaffAuth({ onAuth }: { onAuth: (user: SessionUser) => void }) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -91,6 +92,8 @@ function StaffAuth({ onAuth }: { onAuth: (user: SessionUser) => void }) {
     try {
       const { user } = await api.admin.login(email.trim(), password);
       onAuth(user);
+      // Admins land in their dashboard; staff stay on the check-in dashboard.
+      if (user.role !== 'staff') navigate('/dev/admin', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in. Try again.');
     } finally {

@@ -269,9 +269,17 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
             {user.name} · {user.role === 'owner' ? 'Owner' : 'Organizer'}
           </p>
         </div>
-        <Button variant="outline" onClick={signOut}>
-          Sign out
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/staff">
+              <QrCode aria-hidden />
+              Staff dashboard
+            </Link>
+          </Button>
+          <Button variant="outline" onClick={signOut}>
+            Sign out
+          </Button>
+        </div>
       </header>
 
       <div className="mb-6 overflow-x-auto pb-1">

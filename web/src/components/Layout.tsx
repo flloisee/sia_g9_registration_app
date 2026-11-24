@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 const links = [
   { to: '/', label: 'Home', end: true },
   { to: '/events', label: 'Events', end: false },
-  { to: '/staff', label: 'Staff', end: false },
 ];
 
 export function Layout() {
