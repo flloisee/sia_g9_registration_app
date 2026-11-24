@@ -13,10 +13,10 @@ export function Layout() {
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
             <span className="grid size-7 place-items-center rounded-md bg-primary text-[11px] font-semibold tracking-tight text-primary-foreground">
-              G9
+              EM
             </span>
             <span className="hidden text-[15px] font-semibold tracking-[-0.01em] min-[380px]:inline">
-              SIA G9
+              Event Manager
             </span>
           </Link>
 
@@ -48,7 +48,7 @@ export function Layout() {
 
       <footer className="border-t border-border/70">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:px-6">
-          <p>SIA G9 · {new Date().getFullYear()}</p>
+          <p>Event Manager · {new Date().getFullYear()}</p>
           <p>Trouble registering? Ask the front desk.</p>
         </div>
       </footer>

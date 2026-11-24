@@ -6,7 +6,7 @@ export function HomePage() {
     <div className="mx-auto w-full max-w-3xl py-4 sm:py-10">
       <header className="animate-rise text-center">
         <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-          SIA G9
+          Event Manager
         </p>
         <h1 className="mt-3 text-[30px] leading-[1.15] font-semibold tracking-[-0.02em] text-balance sm:text-[38px]">
           How are you joining us?

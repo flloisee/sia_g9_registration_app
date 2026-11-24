@@ -1,5 +1,5 @@
 {
-  "name": "sia-g9-registration",
+  "name": "event-manager",
   "private": true,
   "workspaces": [
     "server",

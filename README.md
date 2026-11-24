@@ -1,4 +1,4 @@
-# SIA G9 Registration
+# Event Manager
 
 Event registration with QR tickets, emailed tickets, and on-site check-in, plus a staff dashboard
 and an admin panel for events, organizers and volunteer approvals.
