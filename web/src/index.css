@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-sm: calc(var(--radius) - 0.25rem);
+}
+
+:root {
+  /* Warm paper background, ink foreground, one saturated accent. */
+  --background: oklch(0.982 0.0035 84);
+  --foreground: oklch(0.235 0.012 268);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.235 0.012 268);
+  --primary: oklch(0.44 0.145 268);
+  --primary-foreground: oklch(0.985 0.004 84);
+  --secondary: oklch(0.955 0.006 85);
+  --secondary-foreground: oklch(0.32 0.012 268);
+  --muted: oklch(0.958 0.005 85);
+  --muted-foreground: oklch(0.53 0.012 268);
+  --accent: oklch(0.947 0.009 268);
+  --accent-foreground: oklch(0.3 0.02 268);
+  --destructive: oklch(0.55 0.19 25);
+  --success: oklch(0.55 0.13 160);
+  --warning: oklch(0.66 0.13 72);
+  --border: oklch(0.9 0.006 85);
+  --input: oklch(0.885 0.007 85);
+  --ring: oklch(0.52 0.13 268);
+  --radius: 0.75rem;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: oklch(0.44 0.145 268 / 0.16);
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 260ms var(--ease-out) both;
+}
+
+.animate-rise-slow {
+  animation: rise 340ms var(--ease-out) 60ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-rise-slow {
+    animation: none;
+  }
+}
+
+/* html5-qrcode injects its own canvas and video: keep them inside the frame. */
+.qr-region {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: oklch(0.2 0.01 268);
+}
+
+.qr-region video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+
+/* Replace the library's green brackets with neutral ones that match the UI. */
+.qr-region #qr-shaded-region {
+  border-color: oklch(0.18 0.01 268 / 0.45) !important;
+}
+
+.qr-region #qr-shaded-region > div {
+  background-color: oklch(1 0 0 / 0.95) !important;
+  border-radius: 2px;
+}

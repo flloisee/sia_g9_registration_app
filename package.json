@@ -1,0 +1,13 @@
+{
+  "name": "sia-g9-registration",
+  "private": true,
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start": "npm start -w server",
+    "db:migrate": "npm run db:migrate -w server"
+  }
+}
