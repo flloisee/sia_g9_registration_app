@@ -6,6 +6,7 @@ import {
   destroySession,
   getSessionUser,
   hashPassword,
+  isLegacyHash,
   readCookie,
   requireAdmin,
   requireOwner,
@@ -80,8 +81,15 @@ adminRouter.post('/login', loginLimiter, async (req, res) => {
     [email],
   );
   const user = rows[0];
-  if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) {
+  if (!user || !user.is_active || !(await verifyPassword(password, user.password_hash))) {
     return res.status(401).json({ error: 'Email or password is incorrect.' });
+  }
+
+  if (isLegacyHash(user.password_hash)) {
+    await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [
+      await hashPassword(password),
+      user.id,
+    ]);
   }
 
   await pool.execute('DELETE FROM sessions WHERE expires_at < NOW()');
@@ -268,7 +276,7 @@ adminRouter.post('/users', requireUser, requireOwner, async (req, res) => {
   try {
     await pool.execute(
       "INSERT INTO users (id, email, name, password_hash, role) VALUES (?, ?, ?, ?, 'organizer')",
-      [id, email, name, hashPassword(password)],
+      [id, email, name, await hashPassword(password)],
     );
     res.status(201).json({
       user: {

@@ -88,7 +88,7 @@ password, SES…).
 - `staff` — signs up at `/staff`, chooses an event, and starts `pending`. Once approved, they can
   check in attendees and see the attendee list for that event only. Rejected or unassigned
   staff cannot use the check-in tools.
-- Passwords are hashed with `scrypt`; sessions are random 256-bit tokens stored as SHA-256 hashes
+- Passwords are hashed with `argon2id`; sessions are random 256-bit tokens stored as SHA-256 hashes
   in an `httpOnly`, `SameSite=Lax` cookie (7 days, `secure` on HTTPS).
 
 ## Verification

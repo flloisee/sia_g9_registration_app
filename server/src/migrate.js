@@ -112,7 +112,7 @@ try {
   }
 
   const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
 
   if (existing.length > 0) {
     await conn.execute(

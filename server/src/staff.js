@@ -36,7 +36,7 @@ staffRouter.post('/signup', signupLimiter, async (req, res) => {
     await pool.execute(
       `INSERT INTO users (id, email, name, password_hash, role, approval_status, staff_event_id)
        VALUES (?, ?, ?, ?, 'staff', 'pending', ?)`,
-      [id, email, name, hashPassword(password), eventId],
+      [id, email, name, await hashPassword(password), eventId],
     );
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {

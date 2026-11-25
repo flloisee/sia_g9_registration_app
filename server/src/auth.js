@@ -1,23 +1,32 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { argon2id, argon2Verify } from 'hash-wasm';
 import { pool } from './db.js';
 import { toIso } from './helpers.js';
 
 export const SESSION_COOKIE = 'sia_admin';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const KEY_LENGTH = 64;
+// OWASP's argon2id baseline: 19 MiB, 2 passes, 1 lane.
+const ARGON2 = { parallelism: 1, iterations: 2, memorySize: 19456, hashLength: 32 };
 
 export function hashPassword(password) {
-  const salt = randomBytes(16).toString('hex');
-  return `scrypt$${salt}$${scryptSync(password, salt, KEY_LENGTH).toString('hex')}`;
+  return argon2id({ password, salt: randomBytes(16), ...ARGON2, outputType: 'encoded' });
 }
 
-export function verifyPassword(password, stored) {
-  const [scheme, salt, hash] = String(stored ?? '').split('$');
+export async function verifyPassword(password, stored) {
+  const value = String(stored ?? '');
+  if (value.startsWith('$argon2id$')) {
+    return argon2Verify({ password, hash: value }).catch(() => false);
+  }
+  // Legacy scrypt hashes stay valid until the user's next login rehashes them.
+  const [scheme, salt, hash] = value.split('$');
   if (scheme !== 'scrypt' || !salt || !hash) return false;
   const expected = Buffer.from(hash, 'hex');
   const candidate = scryptSync(password, salt, KEY_LENGTH);
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
+
+export const isLegacyHash = (stored) => !String(stored ?? '').startsWith('$argon2id$');
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
