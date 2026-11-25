@@ -69,6 +69,7 @@ a handful of requests served by Express. `npm run tunnel` starts the tunnel alon
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MySQL connection (default database `sia_event_registration`) |
 | `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Owner account for `/dev/admin`, applied by `npm run db:migrate` |
 | `PORT` | API port (default `4000`). If changed, update the Vite proxy in `web/vite.config.ts`. |
+| `LOG_RETENTION_DAYS` | Days of request/pageview logs kept in `docs/logs` (default `14`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | Email delivery |
 | `EVENT_NAME` | Name for the first event seeded by the migration |
 | `TUNNEL_SUBDOMAIN`, `TUNNEL_USE_SUBDOMAIN` | localtunnel name; set the latter to `FALSE` to accept a random URL |

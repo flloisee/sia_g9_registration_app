@@ -15,6 +15,7 @@ import {
   toEvent,
   toIso,
 } from './helpers.js';
+import { log } from './logger.js';
 import { sendTicketEmail } from './mail.js';
 import { staffRouter } from './staff.js';
 import { CODE_RE, newCode, normalizeCode } from './tickets.js';
@@ -25,6 +26,19 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : false);
 app.use(express.json({ limit: '16kb' }));
+
+// One line per request: every API call and every static/page request.
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const agent = (req.get('user-agent') ?? '-').slice(0, 300);
+    log.info(
+      'Netty Server IO #1',
+      `${req.method} ${req.originalUrl.slice(0, 300)} -> ${res.statusCode} (${Date.now() - startedAt}ms) ip=${req.ip} user=${req.user?.id ?? '-'} agent="${agent}"`,
+    );
+  });
+  next();
+});
 
 // Staff and admin pages are unlisted; keep them out of search engines.
 app.use(['/dev', '/staff'], (_req, res, next) => {
@@ -119,6 +133,17 @@ app.get('/api/health', async (_req, res) => {
   } catch {
     res.status(503).json({ ok: false, db: 'down' });
   }
+});
+
+// Client-side navigations never reach the server, so the SPA reports them here.
+app.post('/api/telemetry/pageview', rateLimit(300, 60_000), (req, res) => {
+  const route = clean(req.body?.path, 300) || '/';
+  const referrer = clean(req.body?.referrer, 300);
+  log.info(
+    'Netty Server IO #1',
+    `Pageview ${route}${referrer ? ` <- ${referrer}` : ''} ip=${req.ip}`,
+  );
+  res.status(204).end();
 });
 
 app.get('/api/events', async (_req, res) => {
@@ -292,16 +317,22 @@ if (existsSync(dist)) {
   });
 }
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   console.error(err);
+  log.error(
+    'Server thread',
+    `${req.method} ${req.originalUrl.slice(0, 300)} failed: ${err.message}`,
+  );
   if (!res.headersSent) res.status(500).json({ error: 'Something went wrong on our side.' });
 });
 
 app.listen(PORT, async () => {
   console.log(`API listening on http://localhost:${PORT}`);
+  log.info('Server thread', `Done! API listening on http://localhost:${PORT}`);
   try {
     await pool.query('SELECT 1');
   } catch {
     console.warn('[config] MySQL is not reachable. Run "npm run db:migrate" and check .env.');
+    log.warn('Server thread', 'MySQL is unreachable. Run "npm run db:migrate" and check .env.');
   }
 });

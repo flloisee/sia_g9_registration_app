@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { EventPage } from '@/pages/EventPage';
 import { EventsPage } from '@/pages/EventsPage';
@@ -17,33 +17,49 @@ const AdminPage = lazy(() =>
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<HomePage />} />
-        <Route path="events" element={<EventsPage />} />
-        <Route path="events/:id" element={<EventPage />} />
-        <Route
-          path="staff"
-          element={
-            <Suspense fallback={<PageLoading />}>
-              <StaffPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="dev/admin"
-          element={
-            <Suspense fallback={<PageLoading />}>
-              <AdminPage />
-            </Suspense>
-          }
-        />
-        <Route path="scan" element={<Navigate to="/staff?tab=checkin" replace />} />
-        <Route path="attendees" element={<Navigate to="/staff?tab=attendees" replace />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+    <>
+      <Pageviews />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<HomePage />} />
+          <Route path="events" element={<EventsPage />} />
+          <Route path="events/:id" element={<EventPage />} />
+          <Route
+            path="staff"
+            element={
+              <Suspense fallback={<PageLoading />}>
+                <StaffPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="dev/admin"
+            element={
+              <Suspense fallback={<PageLoading />}>
+                <AdminPage />
+              </Suspense>
+            }
+          />
+          <Route path="scan" element={<Navigate to="/staff?tab=checkin" replace />} />
+          <Route path="attendees" element={<Navigate to="/staff?tab=attendees" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </>
   );
+}
+
+function Pageviews() {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    fetch('/api/telemetry/pageview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: pathname + search, referrer: document.referrer }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [pathname, search]);
+  return null;
 }
 
 function PageLoading() {
