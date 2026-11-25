@@ -21,6 +21,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1314,11 +1315,16 @@ function Modal({
     const handleKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-foreground/35 p-4"
       onClick={onClose}
@@ -1335,7 +1341,8 @@ function Modal({
         </h2>
         <div className="mt-3">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
