@@ -29,8 +29,8 @@ export function Scanner() {
     if (code.length !== 8 || busy.current) return;
 
     const now = Date.now();
-    // The camera keeps seeing the same code: don't re-submit it.
-    if (last.current?.code === code && now - last.current.at < 8000) return;
+    // The camera re-decodes the same code every frame, valid or not: re-check it at most once per 5s.
+    if (last.current?.code === code && now - last.current.at < 5000) return;
     last.current = { code, at: now };
     busy.current = true;
     setResult({ kind: 'pending', code });
@@ -40,7 +40,6 @@ export function Scanner() {
       setResult({ kind: response.status, attendee: response.attendee });
       navigator.vibrate?.(response.status === 'checked-in' ? 55 : [35, 60, 35]);
     } catch (error) {
-      last.current = null;
       const status = error instanceof ApiError ? error.status : 0;
       setResult({
         kind: 'error',

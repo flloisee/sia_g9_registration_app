@@ -134,6 +134,18 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+// The scanner re-decodes the same QR several times a second. Reuse the last check for 5s so
+// invalid tickets can't spam POST /api/checkin — valid or not.
+let lastCheckin: { code: string; at: number; result: Promise<CheckinResult> } | null = null;
+
+function checkin(code: string) {
+  const now = Date.now();
+  if (lastCheckin?.code === code && now - lastCheckin.at < 5000) return lastCheckin.result;
+  const result = request<CheckinResult>('/api/checkin', json('POST', { code }));
+  lastCheckin = { code, at: now, result };
+  return result;
+}
+
 export const api = {
   events: () => request<{ events: PublicEventInfo[] }>('/api/events'),
   event: (id: number) => request<{ event: PublicEventInfo }>(`/api/events/${id}`),
@@ -141,7 +153,7 @@ export const api = {
   register: (eventId: number, input: RegisterInput) =>
     request<RegisterResult>('/api/register', json('POST', { ...input, eventId })),
 
-  checkin: (code: string) => request<CheckinResult>('/api/checkin', json('POST', { code })),
+  checkin,
 
   attendees: (eventId?: number) =>
     request<AttendeesResult>(`/api/attendees${eventId ? `?eventId=${eventId}` : ''}`),
