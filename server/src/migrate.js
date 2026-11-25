@@ -58,6 +58,17 @@ try {
     );
   }
 
+  const [pendingEmailColumn] = await conn.query("SHOW COLUMNS FROM users LIKE 'pending_email'");
+  if (pendingEmailColumn.length === 0) {
+    await conn.query(
+      `ALTER TABLE users
+         ADD COLUMN pending_email VARCHAR(190) NULL AFTER staff_event_id,
+         ADD COLUMN pending_email_token CHAR(64) NULL AFTER pending_email,
+         ADD COLUMN pending_email_expires_at DATETIME NULL AFTER pending_email_token,
+         ADD KEY idx_users_pending_email_token (pending_email_token)`,
+    );
+  }
+
   const [eventCount] = await conn.query('SELECT COUNT(*) AS count FROM events');
   let defaultEventId = null;
 

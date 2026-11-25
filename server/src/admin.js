@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import {
   clearSessionCookie,
@@ -18,6 +18,7 @@ import {
 } from './auth.js';
 import { pool } from './db.js';
 import { clean, EMAIL_RE, mysqlDateTime, rateLimit, toEvent, toIso } from './helpers.js';
+import { sendEmailChangeEmail } from './mail.js';
 
 export const adminRouter = Router();
 
@@ -59,6 +60,27 @@ const EVENT_SELECT = `SELECT e.*, u.name AS creator_name,
     (SELECT COUNT(*) FROM attendees a WHERE a.event_id = e.id) AS registered_count,
     (SELECT COUNT(*) FROM attendees a WHERE a.event_id = e.id AND a.checked_in_at IS NOT NULL) AS checked_in_count
   FROM events e LEFT JOIN users u ON u.id = e.created_by`;
+
+const VOLUNTEER_SELECT = `SELECT u.id, u.name, u.email, u.pending_email, u.approval_status, u.is_active,
+    u.created_at, u.staff_event_id, e.name AS event_name, e.starts_at AS event_starts_at,
+    e.created_by AS event_creator
+  FROM users u LEFT JOIN events e ON e.id = u.staff_event_id`;
+
+const CLEAR_PENDING_EMAIL =
+  'UPDATE users SET pending_email = NULL, pending_email_token = NULL, pending_email_expires_at = NULL WHERE id = ?';
+
+const toVolunteer = (row) => ({
+  id: row.id,
+  name: row.name,
+  email: row.email,
+  pendingEmail: row.pending_email ?? null,
+  approvalStatus: row.approval_status,
+  isActive: Boolean(row.is_active),
+  eventId: row.staff_event_id,
+  eventName: row.event_name ?? null,
+  eventStartsAt: toIso(row.event_starts_at),
+  createdAt: toIso(row.created_at),
+});
 
 async function findEvent(id, user) {
   const [rows] = await pool.execute('SELECT id, created_by FROM events WHERE id = ?', [id]);
@@ -213,6 +235,155 @@ adminRouter.get('/staff-requests', requireUser, requireAdmin, async (req, res) =
       createdAt: toIso(row.created_at),
     })),
   });
+});
+
+adminRouter.get('/volunteers', requireUser, requireAdmin, async (req, res) => {
+  const scoped = req.user.role === 'organizer';
+  const [rows] = await pool.execute(
+    `${VOLUNTEER_SELECT}
+      WHERE u.role = 'staff'
+        ${scoped ? 'AND e.created_by = ?' : ''}
+      ORDER BY e.starts_at IS NULL, e.starts_at ASC, u.name ASC`,
+    scoped ? [req.user.id] : [],
+  );
+
+  res.json({ volunteers: rows.map(toVolunteer) });
+});
+
+// The new address proves ownership before the change applies.
+adminRouter.get('/volunteers/confirm-email', async (req, res) => {
+  const page = (status, title, message) =>
+    res.status(status).type('html').send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Event Manager</title></head>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f5f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1c22;">
+<main style="max-width:440px;margin:16px;padding:32px;text-align:center;background:#fff;border:1px solid #e7e5e0;border-radius:16px;">
+<h1 style="margin:0 0 12px;font-size:22px;">${title}</h1>
+<p style="margin:0;font-size:15px;line-height:1.6;color:#4a4a55;">${message}</p>
+</main></body></html>`);
+
+  const token = String(req.query.token ?? '');
+  if (!token) return page(400, 'Link is invalid', 'Ask an admin to send a new verification email.');
+
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const [rows] = await pool.execute(
+    `SELECT id FROM users
+      WHERE role = 'staff' AND pending_email IS NOT NULL
+        AND pending_email_token = ? AND pending_email_expires_at > NOW()`,
+    [tokenHash],
+  );
+  const volunteer = rows[0];
+  if (!volunteer) {
+    return page(400, 'Link expired', 'Ask an admin to send a new verification email.');
+  }
+
+  try {
+    await pool.execute(
+      `UPDATE users
+          SET email = pending_email, pending_email = NULL,
+              pending_email_token = NULL, pending_email_expires_at = NULL
+        WHERE id = ?`,
+      [volunteer.id],
+    );
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return page(409, 'Email unavailable', 'Another account already uses that email address.');
+    }
+    throw err;
+  }
+
+  page(200, 'Email updated', 'The volunteer can now sign in with this address.');
+});
+
+adminRouter.patch('/volunteers/:id', requireUser, requireAdmin, async (req, res) => {
+  const id = String(req.params.id ?? '');
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid volunteer.' });
+
+  const [rows] = await pool.execute(`${VOLUNTEER_SELECT} WHERE u.id = ? AND u.role = 'staff'`, [id]);
+  const volunteer = rows[0];
+  if (!volunteer) return res.status(404).json({ error: 'Volunteer not found.' });
+  if (req.user.role === 'organizer' && volunteer.event_creator !== req.user.id) {
+    return res.status(404).json({ error: 'Volunteer not found.' });
+  }
+
+  const name = clean(req.body?.name, 120);
+  const email = clean(req.body?.email, 190).toLowerCase();
+  const eventId = Number(req.body?.eventId);
+
+  if (name.length < 2) return res.status(400).json({ error: 'Enter the volunteer’s name.' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (!Number.isInteger(eventId)) {
+    return res.status(400).json({ error: 'Choose the event they volunteered for.' });
+  }
+
+  const [events] = await pool.execute('SELECT id, created_by FROM events WHERE id = ?', [eventId]);
+  const event = events[0];
+  if (!event) return res.status(400).json({ error: 'That event no longer exists.' });
+  if (req.user.role === 'organizer' && event.created_by !== req.user.id) {
+    return res.status(400).json({ error: 'You can only assign volunteers to your own events.' });
+  }
+
+  let emailSent = false;
+  let emailPreviewUrl = null;
+
+  if (email !== String(volunteer.email).toLowerCase()) {
+    const [taken] = await pool.execute('SELECT id FROM users WHERE email = ? AND id <> ?', [
+      email,
+      id,
+    ]);
+    if (taken.length) return res.status(409).json({ error: 'That email already has an account.' });
+
+    const token = randomBytes(32).toString('base64url');
+    await pool.execute(
+      'UPDATE users SET pending_email = ?, pending_email_token = ?, pending_email_expires_at = ? WHERE id = ?',
+      [
+        email,
+        createHash('sha256').update(token).digest('hex'),
+        mysqlDateTime(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+        id,
+      ],
+    );
+
+    try {
+      const mail = await sendEmailChangeEmail({
+        to: email,
+        name,
+        confirmUrl: `${req.protocol}://${req.get('host')}/api/admin/volunteers/confirm-email?token=${token}`,
+      });
+      emailSent = true;
+      emailPreviewUrl = mail.previewUrl;
+    } catch (err) {
+      console.error('[mail]', err.message);
+      await pool.execute(CLEAR_PENDING_EMAIL, [id]);
+      return res.status(502).json({ error: 'Could not send the verification email. Try again.' });
+    }
+  } else {
+    await pool.execute(CLEAR_PENDING_EMAIL, [id]);
+  }
+
+  await pool.execute('UPDATE users SET name = ?, staff_event_id = ? WHERE id = ?', [
+    name,
+    eventId,
+    id,
+  ]);
+
+  const [updated] = await pool.execute(`${VOLUNTEER_SELECT} WHERE u.id = ?`, [id]);
+  res.json({ volunteer: toVolunteer(updated[0]), emailSent, emailPreviewUrl });
+});
+
+adminRouter.delete('/volunteers/:id', requireUser, requireAdmin, async (req, res) => {
+  const id = String(req.params.id ?? '');
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid volunteer.' });
+
+  const [rows] = await pool.execute(`${VOLUNTEER_SELECT} WHERE u.id = ? AND u.role = 'staff'`, [id]);
+  const volunteer = rows[0];
+  if (!volunteer) return res.status(404).json({ error: 'Volunteer not found.' });
+  if (req.user.role === 'organizer' && volunteer.event_creator !== req.user.id) {
+    return res.status(404).json({ error: 'Volunteer not found.' });
+  }
+
+  // Sessions are removed by the ON DELETE CASCADE on sessions.user_id.
+  await pool.execute("DELETE FROM users WHERE id = ? AND role = 'staff'", [id]);
+  res.json({ ok: true });
 });
 
 adminRouter.patch('/staff-requests/:id', requireUser, requireAdmin, async (req, res) => {

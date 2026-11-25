@@ -100,6 +100,25 @@ export type StaffRequest = {
   createdAt: string;
 };
 
+export type AdminVolunteerRow = {
+  id: string;
+  name: string;
+  email: string;
+  pendingEmail: string | null;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  isActive: boolean;
+  eventId: number | null;
+  eventName: string | null;
+  eventStartsAt: string | null;
+  createdAt: string;
+};
+
+export type VolunteerInput = {
+  name: string;
+  email: string;
+  eventId: number;
+};
+
 export type AttendeesResult = {
   events: { id: number; name: string; startsAt: string }[];
   attendees: Attendee[];
@@ -182,6 +201,15 @@ export const api = {
       request<{ user: AdminUserRow }>('/api/admin/users', json('POST', input)),
     setUserActive: (id: string, isActive: boolean) =>
       request<{ ok: true }>(`/api/admin/users/${id}`, json('PATCH', { isActive })),
+
+    volunteers: () => request<{ volunteers: AdminVolunteerRow[] }>('/api/admin/volunteers'),
+    updateVolunteer: (id: string, input: VolunteerInput) =>
+      request<{ volunteer: AdminVolunteerRow; emailSent: boolean; emailPreviewUrl: string | null }>(
+        `/api/admin/volunteers/${id}`,
+        json('PATCH', input),
+      ),
+    deleteVolunteer: (id: string) =>
+      request<{ ok: true }>(`/api/admin/volunteers/${id}`, { method: 'DELETE' }),
 
     staffRequests: () => request<{ requests: StaffRequest[] }>('/api/admin/staff-requests'),
     setStaffRequest: (id: string, status: 'approved' | 'rejected') =>

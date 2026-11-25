@@ -1,18 +1,26 @@
 import {
   CalendarDays,
   ExternalLink,
+  HeartHandshake,
   LayoutDashboard,
   Loader2,
   Pencil,
   Plus,
   QrCode,
+  Search,
   Ticket,
   Trash2,
   UserCheck,
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,13 +35,14 @@ import {
   type AdminEvent,
   type AdminUser,
   type AdminUserRow,
+  type AdminVolunteerRow,
   type EventInfo,
   type EventInput,
   type StaffRequest,
 } from '@/lib/api';
 import { formatDateTime, formatEventDate, toLocalInput } from '@/lib/format';
 
-type TabId = 'overview' | 'events' | 'approvals' | 'organizers';
+type TabId = 'overview' | 'events' | 'volunteers' | 'approvals' | 'organizers';
 type EventFormState = { mode: 'new' } | { mode: 'edit'; event: AdminEvent } | null;
 
 export function AdminPage() {
@@ -133,6 +142,7 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [requests, setRequests] = useState<StaffRequest[]>([]);
+  const [volunteers, setVolunteers] = useState<AdminVolunteerRow[]>([]);
   const [eventForm, setEventForm] = useState<EventFormState>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +152,7 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
   const requested = params.get('tab');
   const tab: TabId =
     requested === 'events' ||
+    requested === 'volunteers' ||
     requested === 'approvals' ||
     (requested === 'organizers' && user.role === 'owner')
       ? requested
@@ -150,6 +161,7 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
   const tabs: { id: TabId; label: string; icon: LucideIcon }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'events', label: 'Events', icon: CalendarDays },
+    { id: 'volunteers', label: 'Volunteers', icon: HeartHandshake },
     {
       id: 'approvals',
       label: requests.length ? `Approvals (${requests.length})` : 'Approvals',
@@ -187,9 +199,19 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
     }
   }
 
+  async function refreshVolunteers() {
+    try {
+      const result = await api.admin.volunteers();
+      setVolunteers(result.volunteers);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load volunteers.');
+    }
+  }
+
   useEffect(() => {
     void refreshEvents();
     void refreshRequests();
+    void refreshVolunteers();
     if (user.role === 'owner') void refreshUsers();
   }, [user.role]);
 
@@ -244,6 +266,7 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
     setNotice(`${status === 'approved' ? 'Approved' : 'Declined'} ${request.name}.`);
     setError(null);
     void refreshRequests();
+    void refreshVolunteers();
   }
 
   async function signOut() {
@@ -347,6 +370,14 @@ function AdminPanel({ user, onSignOut }: { user: AdminUser; onSignOut: () => voi
             setForm={setEventForm}
             onSaved={handleSaved}
             onDelete={handleDelete}
+            onError={setError}
+          />
+        )}
+        {tab === 'volunteers' && (
+          <VolunteersTab
+            volunteers={volunteers}
+            events={events}
+            onChanged={() => void refreshVolunteers()}
             onError={setError}
           />
         )}
@@ -913,6 +944,405 @@ function EventForm({
       </CardContent>
     </Card>
   );
+}
+
+type VolunteerSort = 'date' | 'name' | 'count';
+
+function VolunteersTab({
+  volunteers,
+  events,
+  onChanged,
+  onError,
+}: {
+  volunteers: AdminVolunteerRow[];
+  events: AdminEvent[];
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<VolunteerSort>('date');
+  const [editing, setEditing] = useState<AdminVolunteerRow | null>(null);
+  const [deleting, setDeleting] = useState<AdminVolunteerRow | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const search = query.trim().toLowerCase();
+  const filtered = volunteers.filter(
+    (volunteer) =>
+      !search ||
+      [
+        volunteer.name,
+        volunteer.email,
+        volunteer.pendingEmail ?? '',
+        volunteer.eventName ?? '',
+        volunteer.approvalStatus,
+      ].some((value) => value.toLowerCase().includes(search)),
+  );
+
+  const groups = new Map<number | null, AdminVolunteerRow[]>();
+  for (const volunteer of filtered) {
+    const members = groups.get(volunteer.eventId) ?? [];
+    members.push(volunteer);
+    groups.set(volunteer.eventId, members);
+  }
+
+  const sections = [...groups.entries()]
+    .map(([eventId, members]) => ({
+      eventId,
+      eventName: members[0].eventName,
+      eventStartsAt: members[0].eventStartsAt,
+      members: [...members].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => {
+      if (sort === 'count') return b.members.length - a.members.length;
+      if (sort === 'name') return (a.eventName ?? '\uffff').localeCompare(b.eventName ?? '\uffff');
+      if (!a.eventStartsAt) return 1;
+      if (!b.eventStartsAt) return -1;
+      return a.eventStartsAt.localeCompare(b.eventStartsAt);
+    });
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeletingBusy(true);
+    try {
+      await api.admin.deleteVolunteer(deleting.id);
+      setNotice(`Deleted ${deleting.name}.`);
+      setPreviewUrl(null);
+      setDeleting(null);
+      onChanged();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Could not delete the volunteer.');
+    } finally {
+      setDeletingBusy(false);
+    }
+  }
+
+  function handleSaved(volunteer: AdminVolunteerRow, emailSent: boolean, preview: string | null) {
+    setEditing(null);
+    setNotice(
+      emailSent
+        ? `Saved ${volunteer.name}. Verification email sent to ${volunteer.pendingEmail}.`
+        : `Saved ${volunteer.name}.`,
+    );
+    setPreviewUrl(preview);
+    onChanged();
+  }
+
+  return (
+    <>
+      <div>
+        <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Volunteers</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+          Everyone who signed up to volunteer, grouped by the event they are assigned to.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_15rem]">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name, email or event"
+            aria-label="Search volunteers"
+            className="pl-10"
+          />
+        </div>
+        <Select
+          value={sort}
+          onChange={(event) => setSort(event.target.value as VolunteerSort)}
+          aria-label="Sort volunteers"
+        >
+          <option value="date">Sort: event date</option>
+          <option value="name">Sort: event name</option>
+          <option value="count">Sort: most volunteers</option>
+        </Select>
+      </div>
+
+      {notice && (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-success/25 bg-success/5 px-4 py-2.5 text-[13px] text-success"
+        >
+          {notice}
+        </p>
+      )}
+      {previewUrl && (
+        <p className="mt-2 text-[12px] text-muted-foreground">
+          Dev inbox:{' '}
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            open the verification email
+          </a>
+        </p>
+      )}
+
+      {sections.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
+          <p className="text-[14px] font-medium">
+            {search ? 'No matching volunteers' : 'No volunteers yet'}
+          </p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {search
+              ? 'Try a different name, email or event.'
+              : 'Staff sign-ups appear here once they choose an event.'}
+          </p>
+        </div>
+      ) : (
+        sections.map((section) => (
+          <Card key={section.eventId ?? 'unassigned'} className="mt-4">
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle>{section.eventName ?? 'No event assigned'}</CardTitle>
+                  <CardDescription>
+                    {section.eventStartsAt
+                      ? formatEventDate(section.eventStartsAt)
+                      : 'The event is no longer available.'}
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary">
+                  {section.members.length} volunteer{section.members.length === 1 ? '' : 's'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y divide-border/70">
+                {section.members.map((volunteer) => (
+                  <li
+                    key={volunteer.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-medium">{volunteer.name}</p>
+                      <p className="truncate text-[12.5px] text-muted-foreground">
+                        {volunteer.email}
+                      </p>
+                      {volunteer.pendingEmail && (
+                        <p className="truncate text-[12px] text-warning">
+                          Pending: {volunteer.pendingEmail}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                      <span className="mr-1 text-[12px] text-muted-foreground tabular-nums">
+                        Signed up {formatDateTime(volunteer.createdAt)}
+                      </span>
+                      {!volunteer.isActive && <Badge variant="outline">Disabled</Badge>}
+                      <VolunteerStatus status={volunteer.approvalStatus} />
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(volunteer)}>
+                        <Pencil aria-hidden />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeleting(volunteer)}
+                      >
+                        <Trash2 aria-hidden />
+                        Delete
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      {editing && (
+        <EditVolunteerModal
+          volunteer={editing}
+          events={events}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+          onError={onError}
+        />
+      )}
+
+      {deleting && (
+        <Modal
+          title="Delete volunteer?"
+          onClose={() => {
+            if (!deletingBusy) setDeleting(null);
+          }}
+        >
+          <p className="text-[13.5px] leading-relaxed text-muted-foreground">
+            This permanently removes{' '}
+            <span className="font-medium text-foreground">{deleting.name}</span> and revokes their
+            staff access. This cannot be undone.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleting(null)} disabled={deletingBusy}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deletingBusy}>
+              {deletingBusy ? 'Deleting…' : 'Delete volunteer'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function EditVolunteerModal({
+  volunteer,
+  events,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  volunteer: AdminVolunteerRow;
+  events: AdminEvent[];
+  onClose: () => void;
+  onSaved: (volunteer: AdminVolunteerRow, emailSent: boolean, previewUrl: string | null) => void;
+  onError: (message: string) => void;
+}) {
+  const [name, setName] = useState(volunteer.name);
+  const [email, setEmail] = useState(volunteer.email);
+  const [eventId, setEventId] = useState(volunteer.eventId ? String(volunteer.eventId) : '');
+  const [busy, setBusy] = useState(false);
+
+  const emailChanged = email.trim().toLowerCase() !== volunteer.email.toLowerCase();
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!eventId) return;
+    setBusy(true);
+    try {
+      const result = await api.admin.updateVolunteer(volunteer.id, {
+        name: name.trim(),
+        email: email.trim(),
+        eventId: Number(eventId),
+      });
+      onSaved(result.volunteer, result.emailSent, result.emailPreviewUrl);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Could not save the volunteer.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit volunteer" onClose={() => (busy ? undefined : onClose())}>
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="volunteer-name">Full name</Label>
+          <Input
+            id="volunteer-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            autoComplete="off"
+            required
+            autoFocus
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="volunteer-email">Email address</Label>
+          <Input
+            id="volunteer-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="off"
+            required
+          />
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            {emailChanged
+              ? 'A verification link goes to the new address; the change applies once it is confirmed.'
+              : 'Changing this sends a verification link to the new address.'}
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="volunteer-event">Volunteering for</Label>
+          <Select
+            id="volunteer-event"
+            value={eventId}
+            onChange={(event) => setEventId(event.target.value)}
+            required
+          >
+            <option value="" disabled>
+              Choose an event
+            </option>
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.name} · {formatEventDate(event.startsAt)}
+              </option>
+            ))}
+          </Select>
+          {events.length === 0 && (
+            <p className="text-[12px] text-muted-foreground">Create an event first.</p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy || !eventId}>
+            {busy ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const handleKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-foreground/35 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-modal-title"
+        className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-[0_1px_2px_oklch(0.235_0.012_268/0.04),0_20px_60px_-30px_oklch(0.235_0.012_268/0.5)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="admin-modal-title" className="text-[18px] font-semibold tracking-[-0.01em]">
+          {title}
+        </h2>
+        <div className="mt-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function VolunteerStatus({ status }: { status: AdminVolunteerRow['approvalStatus'] }) {
+  if (status === 'approved') return <Badge variant="success">Approved</Badge>;
+  if (status === 'rejected') return <Badge variant="destructive">Declined</Badge>;
+  return <Badge variant="warning">Pending</Badge>;
 }
 
 function ApprovalsTab({

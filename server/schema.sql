@@ -6,11 +6,15 @@ CREATE TABLE IF NOT EXISTS users (
   role            ENUM('owner', 'organizer', 'staff') NOT NULL DEFAULT 'staff',
   approval_status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'approved',
   staff_event_id  INT UNSIGNED NULL,
+  pending_email   VARCHAR(190) NULL,
+  pending_email_token CHAR(64) NULL,
+  pending_email_expires_at DATETIME NULL,
   is_active       TINYINT(1)   NOT NULL DEFAULT 1,
   created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email),
-  KEY idx_users_staff_event (staff_event_id)
+  KEY idx_users_staff_event (staff_event_id),
+  KEY idx_users_pending_email_token (pending_email_token)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci;

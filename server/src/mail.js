@@ -98,3 +98,40 @@ export async function sendTicketEmail(attendee) {
 
   return { previewUrl: nodemailer.getTestMessageUrl(info) || null };
 }
+
+export async function sendEmailChangeEmail({ to, name, confirmUrl }) {
+  const { transporter, from } = await getTransport();
+  const safeName = escapeHtml(name);
+  const safeUrl = escapeHtml(confirmUrl);
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:32px 16px;background:#f6f5f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1c22;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e7e5e0;border-radius:16px;">
+          <tr><td style="padding:32px;">
+            <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#6b6b76;">Event Manager</p>
+            <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;letter-spacing:-0.01em;">Confirm your email, ${safeName}.</h1>
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#4a4a55;">An admin added this address to your volunteer account. Confirm it to finish the change.</p>
+            <p style="margin:0 0 24px;"><a href="${safeUrl}" style="display:inline-block;padding:12px 20px;border-radius:10px;background:#1c1c22;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;">Confirm email address</a></p>
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#6b6b76;">This link expires in 24 hours. If you weren't expecting this, ignore this email.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = `An admin added this address to your volunteer account, ${name}.\n\nConfirm it within 24 hours:\n${confirmUrl}\n\nIf you weren't expecting this, ignore this email.\n`;
+
+  const info = await transporter.sendMail({
+    from,
+    to,
+    subject: 'Confirm your volunteer email address',
+    text,
+    html,
+  });
+
+  return { previewUrl: nodemailer.getTestMessageUrl(info) || null };
+}
