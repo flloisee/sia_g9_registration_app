@@ -191,6 +191,8 @@ export const api = {
       request<{ event: AdminEvent }>(`/api/admin/events/${id}`, json('PATCH', input)),
     deleteEvent: (id: number) =>
       request<{ ok: true }>(`/api/admin/events/${id}`, { method: 'DELETE' }),
+    deleteAttendee: (id: number) =>
+      request<{ ok: true }>(`/api/admin/attendees/${id}`, { method: 'DELETE' }),
 
     users: () => request<{ users: AdminUserRow[] }>('/api/admin/users'),
     createUser: (input: { name: string; email: string; password: string }) =>

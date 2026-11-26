@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import {
+  canAccessEvent,
   clearSessionCookie,
   createSession,
   destroySession,
@@ -228,6 +229,20 @@ adminRouter.delete('/events/:id', requireUser, requireAdmin, async (req, res) =>
 
   // Attendees are removed by the ON DELETE CASCADE on attendees.event_id.
   await pool.execute('DELETE FROM events WHERE id = ?', [id]);
+  res.json({ ok: true });
+});
+
+adminRouter.delete('/attendees/:id', requireUser, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid attendee.' });
+
+  const [rows] = await pool.execute('SELECT event_id FROM attendees WHERE id = ?', [id]);
+  if (!rows.length) return res.status(404).json({ error: 'Attendee not found.' });
+  if (!(await canAccessEvent(req.user, rows[0].event_id))) {
+    return res.status(404).json({ error: 'Attendee not found.' });
+  }
+
+  await pool.execute('DELETE FROM attendees WHERE id = ?', [id]);
   res.json({ ok: true });
 });
 

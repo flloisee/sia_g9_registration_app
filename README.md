@@ -178,6 +178,7 @@ Run through these once after configuring `.env`:
 | `POST` | `/api/admin/events` | admin session | Create an event |
 | `PATCH` | `/api/admin/events/:id` | admin session | Update an event (owner: any, organizer: own) |
 | `DELETE` | `/api/admin/events/:id` | admin session | Delete an event and its registrations (owner: any, organizer: own) |
+| `DELETE` | `/api/admin/attendees/:id` | admin session | Remove one registration (owner: any, organizer: own events) |
 | `GET` | `/api/admin/volunteers` | admin session | Every volunteer and their event (organizer: own events) |
 | `PATCH` | `/api/admin/volunteers/:id` | admin session | Edit name, event or email (email waits for verification; organizer: own events) |
 | `DELETE` | `/api/admin/volunteers/:id` | admin session | Delete a volunteer and their sessions (organizer: own events) |

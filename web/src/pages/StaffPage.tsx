@@ -397,7 +397,10 @@ function StaffHome({
         {tab === 'checkin' ? (
           <Scanner />
         ) : (
-          <AttendeeList lockedEventId={user.role === 'staff' ? user.staffEvent!.id : undefined} />
+          <AttendeeList
+            lockedEventId={user.role === 'staff' ? user.staffEvent!.id : undefined}
+            canDelete={user.role !== 'staff'}
+          />
         )}
       </div>
     </div>

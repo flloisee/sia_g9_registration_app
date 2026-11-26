@@ -1,19 +1,27 @@
-import { RefreshCw, Search } from 'lucide-react';
+import { RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { api, ApiError, type AttendeesResult } from '@/lib/api';
+import { api, ApiError, type Attendee, type AttendeesResult } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
-export function AttendeeList({ lockedEventId }: { lockedEventId?: number }) {
+export function AttendeeList({
+  lockedEventId,
+  canDelete = false,
+}: {
+  lockedEventId?: number;
+  canDelete?: boolean;
+}) {
   const [data, setData] = useState<AttendeesResult | null>(null);
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [eventId, setEventId] = useState<number | ''>('');
   const [reload, setReload] = useState(0);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +61,22 @@ export function AttendeeList({ lockedEventId }: { lockedEventId?: number }) {
 
   const total = data?.stats.total ?? 0;
   const checkedIn = data?.stats.checkedIn ?? 0;
+
+  async function remove(attendee: Attendee) {
+    setDeletingId(attendee.id);
+    try {
+      await api.admin.deleteAttendee(attendee.id);
+      setConfirmId(null);
+      setReload((count) => count + 1);
+    } catch (err) {
+      setError({
+        message: err instanceof ApiError ? err.message : 'Could not remove the attendee.',
+        status: err instanceof ApiError ? err.status : 0,
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <>
@@ -156,6 +180,11 @@ export function AttendeeList({ lockedEventId }: { lockedEventId?: number }) {
               <th scope="col" className="px-4 py-3 font-medium">
                 Checked in
               </th>
+              {canDelete && (
+                <th scope="col" className="px-4 py-3 text-right font-medium">
+                  Remove
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border/70">
@@ -182,12 +211,45 @@ export function AttendeeList({ lockedEventId }: { lockedEventId?: number }) {
                 <td className="px-4 py-3 text-muted-foreground tabular-nums">
                   {attendee.checkedInAt ? formatDateTime(attendee.checkedInAt) : '—'}
                 </td>
+                {canDelete && (
+                  <td className="px-4 py-3">
+                    {confirmId === attendee.id ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="mr-1 text-[12px] text-destructive">Remove?</span>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void remove(attendee)}
+                          disabled={deletingId === attendee.id}
+                        >
+                          {deletingId === attendee.id ? 'Removing…' : 'Remove'}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setConfirmId(attendee.id)}
+                          aria-label={`Remove ${attendee.fullName}`}
+                        >
+                          <Trash2 aria-hidden />
+                          Remove
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
 
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={canDelete ? 7 : 6} className="px-4 py-10 text-center text-muted-foreground">
                   {loading
                     ? 'Loading attendees…'
                     : search
