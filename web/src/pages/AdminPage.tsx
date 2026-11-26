@@ -611,12 +611,32 @@ function EventsTab({
 }) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'all' | 'open' | 'closed'>('all');
+  const [sort, setSort] = useState<'date' | 'name' | 'registered'>('date');
 
   const liveId =
     [...events]
       .filter(registrationOpen)
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0]?.id ??
     null;
+
+  const search = query.trim().toLowerCase();
+  const filtered = events
+    .filter((event) => {
+      if (status !== 'all' && (registrationOpen(event) ? 'open' : 'closed') !== status) {
+        return false;
+      }
+      if (!search) return true;
+      return [event.name, event.title, event.location ?? '', event.creatorName ?? ''].some((value) =>
+        value.toLowerCase().includes(search),
+      );
+    })
+    .sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name);
+      if (sort === 'registered') return b.registered - a.registered;
+      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+    });
 
   async function remove(event: AdminEvent) {
     setDeletingId(event.id);
@@ -668,80 +688,125 @@ function EventsTab({
           </p>
         </div>
       ) : (
-        <ul className="mt-4 divide-y divide-border/70 overflow-hidden rounded-xl border border-border bg-card">
-          {events.map((event) => (
-            <li key={event.id} className="px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-[14.5px] font-medium">{event.name}</p>
-                    {liveId === event.id ? (
-                      <Badge variant="success">Live</Badge>
+        <>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_10rem_12rem]">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search name, title or location"
+                aria-label="Search events"
+                className="pl-10"
+              />
+            </div>
+            <Select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as typeof status)}
+              aria-label="Filter events by status"
+            >
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </Select>
+            <Select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as typeof sort)}
+              aria-label="Sort events"
+            >
+              <option value="date">Sort: event date</option>
+              <option value="name">Sort: name</option>
+              <option value="registered">Sort: most registered</option>
+            </Select>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
+              <p className="text-[14px] font-medium">No matching events</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Try a different search or status.
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-4 divide-y divide-border/70 overflow-hidden rounded-xl border border-border bg-card">
+              {filtered.map((event) => (
+                <li key={event.id} className="px-5 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-[14.5px] font-medium">{event.name}</p>
+                        {liveId === event.id ? (
+                          <Badge variant="success">Live</Badge>
+                        ) : (
+                          <Badge variant={registrationOpen(event) ? 'secondary' : 'outline'}>
+                            {registrationOpen(event) ? 'Open' : 'Closed'}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                        {formatEventDate(event.startsAt)}
+                        {event.location ? ` · ${event.location}` : ''}
+                      </p>
+                      <p className="mt-1 text-[12.5px] text-muted-foreground tabular-nums">
+                        {event.registered} registered · {event.checkedIn} checked in
+                        {user.role === 'owner' && event.creatorName
+                          ? ` · by ${event.creatorName}`
+                          : ''}
+                      </p>
+                    </div>
+
+                    {confirmId === event.id ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <p className="text-[12.5px] text-destructive">
+                          Delete{' '}
+                          {event.registered
+                            ? `and its ${event.registered} registration${
+                                event.registered === 1 ? '' : 's'
+                              }?`
+                            : 'this event?'}
+                        </p>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void remove(event)}
+                          disabled={deletingId === event.id}
+                        >
+                          {deletingId === event.id ? 'Deleting…' : 'Delete'}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
                     ) : (
-                      <Badge variant={registrationOpen(event) ? 'secondary' : 'outline'}>
-                        {registrationOpen(event) ? 'Open' : 'Closed'}
-                      </Badge>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setForm({ mode: 'edit', event })}
+                        >
+                          <Pencil aria-hidden />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setConfirmId(event.id)}
+                        >
+                          <Trash2 aria-hidden />
+                          Delete
+                        </Button>
+                      </div>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {formatEventDate(event.startsAt)}
-                    {event.location ? ` · ${event.location}` : ''}
-                  </p>
-                  <p className="mt-1 text-[12.5px] text-muted-foreground tabular-nums">
-                    {event.registered} registered · {event.checkedIn} checked in
-                    {user.role === 'owner' && event.creatorName
-                      ? ` · by ${event.creatorName}`
-                      : ''}
-                  </p>
-                </div>
-
-                {confirmId === event.id ? (
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <p className="text-[12.5px] text-destructive">
-                      Delete{' '}
-                      {event.registered
-                        ? `and its ${event.registered} registration${
-                            event.registered === 1 ? '' : 's'
-                          }?`
-                        : 'this event?'}
-                    </p>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => void remove(event)}
-                      disabled={deletingId === event.id}
-                    >
-                      {deletingId === event.id ? 'Deleting…' : 'Delete'}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setForm({ mode: 'edit', event })}
-                    >
-                      <Pencil aria-hidden />
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setConfirmId(event.id)}
-                    >
-                      <Trash2 aria-hidden />
-                      Delete
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </>
   );
