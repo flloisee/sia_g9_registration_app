@@ -76,9 +76,7 @@ function StaffAuth({ onAuth }: { onAuth: (user: SessionUser) => void }) {
     };
   }, []);
 
-  const upcoming = (events ?? []).filter(
-    (event) => new Date(event.startsAt).getTime() > Date.now(),
-  );
+  const upcoming = (events ?? []).filter((event) => event.open);
 
   function switchMode(next: 'signin' | 'signup') {
     setMode(next);
@@ -190,11 +188,11 @@ function StaffAuth({ onAuth }: { onAuth: (user: SessionUser) => void }) {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              minLength={mode === 'signup' ? 8 : undefined}
+              minLength={mode === 'signup' ? 12 : undefined}
               required
             />
             {mode === 'signup' && (
-              <p className="text-[12px] text-muted-foreground">At least 8 characters.</p>
+              <p className="text-[12px] text-muted-foreground">At least 12 characters.</p>
             )}
           </div>
 
@@ -219,7 +217,7 @@ function StaffAuth({ onAuth }: { onAuth: (user: SessionUser) => void }) {
               )}
               {events?.length === 0 && (
                 <p className="text-[12px] text-muted-foreground">
-                  No upcoming events to volunteer for yet.
+                  No open events to volunteer for yet.
                 </p>
               )}
             </div>

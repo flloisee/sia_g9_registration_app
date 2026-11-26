@@ -118,8 +118,11 @@ try {
   if (!EMAIL_RE.test(email)) {
     throw new Error('Set ADMIN_EMAIL in .env before running the migration.');
   }
-  if (password.length < 8) {
-    throw new Error('Set ADMIN_PASSWORD (8+ characters) in .env before running the migration.');
+  const WEAK_PASSWORDS = new Set(['change-this-password', 'password', 'admin', 'changeme', 'admin1234']);
+  if (password.length < 12 || password.length > 128 || WEAK_PASSWORDS.has(password.toLowerCase())) {
+    throw new Error(
+      'Set a strong ADMIN_PASSWORD (12-128 characters, not a placeholder) in .env before running the migration.',
+    );
   }
 
   const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);

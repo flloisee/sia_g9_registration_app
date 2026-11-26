@@ -10,7 +10,9 @@
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
     "share": "npm run build && concurrently -n server,tunnel -c magenta,green \"npm:start\" \"npm:tunnel\"",
+    "share:ngrok": "npm run build && concurrently -n server,tunnel -c magenta,green \"npm:start\" \"npm:tunnel:ngrok\"",
     "tunnel": "node --env-file-if-exists=.env scripts/tunnel.mjs",
+    "tunnel:ngrok": "node --env-file-if-exists=.env scripts/tunnel.mjs --ngrok",
     "build": "npm run build -w web",
     "start": "npm start -w server",
     "db:migrate": "npm run db:migrate -w server"

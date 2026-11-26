@@ -18,13 +18,9 @@ export type RegisterInput = {
   phone: string;
 };
 
-export type Ticket = RegisterInput & { code: string };
-
 export type RegisterResult = {
-  attendee: Ticket;
+  email: string;
   eventName: string;
-  qrUrl: string;
-  emailSent: boolean;
   emailPreviewUrl: string | null;
 };
 

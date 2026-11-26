@@ -2,9 +2,7 @@ import {
   ArrowLeft,
   CalendarX,
   Check,
-  Download,
   MailCheck,
-  MailX,
   MapPin,
   Share2,
 } from 'lucide-react';
@@ -86,7 +84,7 @@ export function EventPage() {
   if (result) {
     return (
       <div className="mx-auto w-full max-w-xl">
-        <TicketCard event={event} result={result} onReset={() => setResult(null)} />
+        <ConfirmationCard event={event} result={result} onReset={() => setResult(null)} />
       </div>
     );
   }
@@ -202,7 +200,7 @@ function closedReason(event: PublicEventInfo) {
   return 'Registration is not open right now.';
 }
 
-function TicketCard({
+function ConfirmationCard({
   event,
   result,
   onReset,
@@ -211,81 +209,36 @@ function TicketCard({
   result: RegisterResult;
   onReset: () => void;
 }) {
-  const { attendee, eventName, qrUrl, emailSent, emailPreviewUrl } = result;
-
   return (
     <div className="animate-rise">
       <div className="rounded-xl border border-border bg-card p-6 text-center shadow-[0_1px_2px_oklch(0.235_0.012_268/0.04),0_10px_30px_-24px_oklch(0.235_0.012_268/0.35)] sm:p-8">
         <div className="mx-auto grid size-11 place-items-center rounded-full bg-success/10 text-success">
-          <Check className="size-5" aria-hidden />
+          <MailCheck className="size-5" aria-hidden />
         </div>
-        <h1 className="mt-4 text-[22px] font-semibold tracking-[-0.01em]">You're registered.</h1>
-        <p className="mt-1.5 text-[14px] text-muted-foreground">
-          {attendee.fullName}, your ticket for {eventName} is below.
+        <h1 className="mt-4 text-[22px] font-semibold tracking-[-0.01em]">Check your email.</h1>
+        <p className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
+          We sent your ticket for {result.eventName} to{' '}
+          <span className="font-medium text-foreground">{result.email}</span>.
         </p>
-
-        <div className="mx-auto mt-6 w-fit rounded-xl border border-border bg-white p-3">
-          <img
-            src={qrUrl}
-            alt={`QR code for ticket ${attendee.code}`}
-            width={208}
-            height={208}
-            className="size-52"
-          />
-        </div>
-
-        <p className="mt-5 text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-          Ticket code
-        </p>
-        <p className="mt-1 font-mono text-[19px] font-semibold tracking-[0.16em] tabular-nums">
-          {attendee.code}
-        </p>
-
-        <p className="mt-5 flex items-center justify-center gap-1.5 text-[13px] text-muted-foreground">
-          {emailSent ? (
-            <>
-              <MailCheck className="size-4" aria-hidden />
-              Sent to {attendee.email}
-            </>
-          ) : (
-            <>
-              <MailX className="size-4 text-warning" aria-hidden />
-              Email could not be sent — save the QR code below
-            </>
-          )}
+        <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+          Show the QR code in that email at the door. If it does not arrive, check spam or
+          register again.
         </p>
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
-          <Button asChild variant="outline">
-            <a href={qrUrl} download={`sia-g9-${attendee.code}.png`}>
-              <Download aria-hidden />
-              Save ticket
-            </a>
-          </Button>
+          {result.emailPreviewUrl && (
+            <Button asChild variant="outline" size="sm">
+              <a href={result.emailPreviewUrl} target="_blank" rel="noreferrer">
+                Open dev inbox
+              </a>
+            </Button>
+          )}
           <ShareButton title={event.title} url={eventShareUrl(event.id)} />
-          <Button variant="ghost" onClick={onReset}>
+          <Button variant="ghost" size="sm" onClick={onReset}>
             Register someone else
           </Button>
         </div>
       </div>
-
-      <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
-        Bring the QR code on your phone. If the email is missing, check spam.
-      </p>
-
-      {emailPreviewUrl && (
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          Dev inbox:{' '}
-          <a
-            href={emailPreviewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-primary underline underline-offset-2"
-          >
-            open the sent email
-          </a>
-        </p>
-      )}
     </div>
   );
 }

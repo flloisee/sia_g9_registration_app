@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=../.env src/index.js",
     "start": "node --env-file-if-exists=../.env src/index.js",
-    "db:migrate": "node --env-file-if-exists=../.env src/migrate.js"
+    "db:migrate": "node --env-file-if-exists=../.env src/migrate.js",
+    "test": "node --test"
   }
 }

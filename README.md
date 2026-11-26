@@ -13,8 +13,8 @@ and an admin panel for events, organizers and volunteer approvals.
 
 1. `/` — asks whether you are a guest or staff.
 2. `/events` — guests browse every published event. Each event has its own page at
-   `/events/:id` where guests register (name, email, organization, phone), get an 8-character
-   ticket code and a QR PNG, and can share the event link. Registration is open only while the
+   `/events/:id` where guests register (name, email, organization, phone) and receive an
+   8-character ticket code and QR PNG by email. Registration is open only while the
    event is `open`, has not started, and its deadline has not passed.
 3. The QR image is emailed as an inline attachment (`cid:ticket-qr`) plus a downloadable copy.
 4. `/staff` — staff sign in to check in attendees and see the attendee list for the event they
@@ -32,7 +32,7 @@ Requires Node 20.11+ and MySQL 8+.
 
 ```bash
 npm install
-cp .env.example .env      # set DB_*, ADMIN_EMAIL, ADMIN_PASSWORD
+cp .env.example .env      # set DB_*, ADMIN_EMAIL, ADMIN_PASSWORD (12+ characters)
 npm run db:migrate        # creates the database, tables, first event and admin account
 npm run dev               # API on :4000, app on :5173
 ```
@@ -52,32 +52,71 @@ npm run build   # builds web/dist
 npm start       # serves the built app and the API on :4000
 ```
 
-To share it through localtunnel, build and start the server with the tunnel:
+### Sharing over HTTPS (ngrok or localtunnel)
+
+Browsers only allow camera access on `https://` or `localhost`, so a tunnel is needed for QR
+scanning on a phone. Two providers are wired up; pick one.
+
+**ngrok (recommended — steadier connection, fixed dev domain, fewer dropped requests):**
 
 ```bash
-npm run share   # build + start on :4000 + https://<TUNNEL_SUBDOMAIN>.loca.lt
+# one-time
+brew install ngrok                 # or https://ngrok.com/download
+ngrok config add-authtoken <TOKEN> # free token from https://dashboard.ngrok.com/get-started/your-authtoken
+
+# every time
+npm run share:ngrok                # build + start on :4000 + your ngrok dev domain
 ```
 
-Use `npm run share` rather than tunnelling `npm run dev`: the Vite dev server serves dozens of
-module requests, so one dropped request through the tunnel leaves a blank page. The built app is
-a handful of requests served by Express. `npm run tunnel` starts the tunnel alone.
+`npm run share:ngrok` runs `ngrok http 4000`, which automatically uses your account's dev
+domain. Every account gets one fixed dev domain (find it at
+https://dashboard.ngrok.com/domains) — set `APP_ORIGIN` to that URL and `TRUST_PROXY=1` in
+`.env` once; the URL does not change between restarts. Paid plans can pass a custom domain to
+`ngrok` via its own config if needed.
+
+> ngrok's free plan shows a one-click "Visit Site" warning page to browsers. Upgrade, or use
+> localtunnel, if guests must land on the event page directly.
+
+**localtunnel (no account needed):**
+
+```bash
+npm run share                      # build + start on :4000 + https://<TUNNEL_SUBDOMAIN>.loca.lt
+```
+
+Set `TUNNEL_SUBDOMAIN` (default `event-registration-sia`), then set
+`APP_ORIGIN=https://<TUNNEL_SUBDOMAIN>.loca.lt` and `TRUST_PROXY=1` in `.env`. If the subdomain
+is taken, change it or set `TUNNEL_USE_SUBDOMAIN=FALSE` to accept a random URL (then update
+`APP_ORIGIN` and restart). You can also select the provider with `TUNNEL_PROVIDER=ngrok` and use
+`npm run share`.
+
+`APP_ORIGIN` and `TRUST_PROXY=1` are required either way, so emailed ticket links point at the
+tunnel and rate limits see real client IPs.
+
+Use `npm run share` / `npm run share:ngrok` rather than tunnelling `npm run dev`: the Vite dev
+server serves dozens of module requests, so one dropped request through the tunnel leaves a blank
+page. The built app is a handful of requests served by Express. `npm run tunnel` and
+`npm run tunnel:ngrok` start a tunnel alone.
 
 ### Environment
 
 | Variable | Purpose |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MySQL connection (default database `sia_event_registration`) |
-| `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Owner account for `/dev/admin`, applied by `npm run db:migrate` |
+| `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Owner account for `/dev/admin`, applied by `npm run db:migrate` (password 12+ characters, not a placeholder) |
+| `APP_ORIGIN` | Public origin used in email links, e.g. `https://events.example.com`. Required for any non-localhost host; never trusts the `Host` header. |
 | `PORT` | API port (default `4000`). If changed, update the Vite proxy in `web/vite.config.ts`. |
 | `LOG_RETENTION_DAYS` | Days of request/pageview logs kept in `docs/logs` (default `14`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | Email delivery |
 | `EVENT_NAME` | Name for the first event seeded by the migration |
 | `TUNNEL_SUBDOMAIN`, `TUNNEL_USE_SUBDOMAIN` | localtunnel name; set the latter to `FALSE` to accept a random URL |
-| `TRUST_PROXY` | Set to `1` behind a reverse proxy so rate limiting sees real client IPs |
+| `TUNNEL_PROVIDER` | Tunnel used by `npm run share`: `localtunnel` (default) or `ngrok` |
+| `TRUST_PROXY` | A hop count (`1`) or subnet list when behind a reverse proxy/tunnel, so rate limiting sees real client IPs |
+| `COOKIE_SECURE` | Set to `true` to force `Secure` on the session cookie when TLS terminates before Express |
 
-With no `SMTP_HOST`, mail goes to a throwaway Ethereal inbox: the preview link is printed to the
-console and shown on the ticket screen. Any SMTP provider works (SendGrid, Postmark, Gmail app
-password, SES…).
+With no `SMTP_USER`, mail goes to a throwaway Ethereal inbox: the preview link is printed to the
+console and shown on the confirmation screen. The default config is a Gmail app password: set
+`SMTP_USER` to the full Gmail address and `SMTP_PASS` to the 16-character app password (2-Step
+Verification required). Any other SMTP provider works by overriding `SMTP_HOST`/`SMTP_PORT`.
 
 ## Accounts
 
@@ -114,8 +153,8 @@ Run through these once after configuring `.env`:
 ## Notes for event day
 
 - Browsers only allow camera access on `https://` or `localhost`. On a phone, serve the app over
-  HTTPS (a tunnel such as `cloudflared` works) or type the ticket code instead — the manual field
-  is always available.
+  HTTPS (a tunnel such as ngrok or localtunnel — see *Sharing over HTTPS*) or type the ticket
+  code instead — the manual field is always available.
 - Staff sign in once per device; the session lasts 7 days.
 - The registration endpoint is rate limited to 10 attempts per IP per 10 minutes, in memory
   (per process), and sign-in and volunteer sign-up to 10 attempts per 10 minutes.
@@ -127,7 +166,7 @@ Run through these once after configuring `.env`:
 | --- | --- | --- | --- |
 | `GET` | `/api/events` | — | Public event list, each with `open` |
 | `GET` | `/api/events/:id` | — | Public event detail |
-| `POST` | `/api/register` | — | Register for an event (`eventId`), return ticket + QR URL, send email |
+| `POST` | `/api/register` | — | Register for an event (`eventId`) and email the ticket; the code is never returned to the submitter |
 | `GET` | `/api/tickets/:code/qr.png` | — | QR image |
 | `POST` | `/api/staff/signup` | — | Volunteer sign-up (pending approval, sets session cookie) |
 | `POST` | `/api/checkin` | session | Check in by code (staff: assigned event only) |

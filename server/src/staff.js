@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { createSession, hashPassword, setSessionCookie, toSessionUser } from './auth.js';
 import { pool } from './db.js';
-import { clean, EMAIL_RE, rateLimit } from './helpers.js';
+import { clean, EMAIL_RE, eventIsOpen, rateLimit } from './helpers.js';
 
 export const staffRouter = Router();
 
@@ -16,18 +16,15 @@ staffRouter.post('/signup', signupLimiter, async (req, res) => {
 
   if (name.length < 2) return res.status(400).json({ error: 'Enter your name.' });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
+  if (password.length < 12 || password.length > 128) {
+    return res.status(400).json({ error: 'Use a password of 12 to 128 characters.' });
   }
   if (!Number.isInteger(eventId)) {
     return res.status(400).json({ error: 'Choose the event you want to volunteer for.' });
   }
 
-  const [events] = await pool.execute(
-    'SELECT id FROM events WHERE id = ? AND starts_at > NOW()',
-    [eventId],
-  );
-  if (!events.length) {
+  const [events] = await pool.execute('SELECT * FROM events WHERE id = ?', [eventId]);
+  if (!events.length || !eventIsOpen(events[0])) {
     return res.status(400).json({ error: 'That event is no longer open for volunteers.' });
   }
 

@@ -68,7 +68,11 @@ export function readCookie(req, name) {
     const index = part.indexOf('=');
     if (index === -1) continue;
     if (part.slice(0, index).trim() === name) {
-      return decodeURIComponent(part.slice(index + 1).trim());
+      try {
+        return decodeURIComponent(part.slice(index + 1).trim());
+      } catch {
+        return null;
+      }
     }
   }
   return null;
@@ -78,7 +82,8 @@ export function setSessionCookie(req, res, token) {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: req.secure,
+    // Behind a TLS-terminating proxy req.secure is false unless trust proxy is set.
+    secure: process.env.COOKIE_SECURE === 'true' || req.secure,
     path: '/',
     maxAge: SESSION_TTL_MS,
   });
@@ -108,6 +113,31 @@ export async function requireUser(req, res, next) {
   if (!user) return res.status(401).json({ error: 'Sign in to continue.' });
   req.user = user;
   next();
+}
+
+// Object-level authorization: callers may only touch events they own or are assigned to.
+export async function canAccessEvent(user, eventId) {
+  if (user.role === 'owner') return true;
+  if (user.role === 'staff') return user.staffEvent?.id === eventId;
+  if (user.role === 'organizer') {
+    const [rows] = await pool.execute('SELECT 1 FROM events WHERE id = ? AND created_by = ?', [
+      eventId,
+      user.id,
+    ]);
+    return rows.length > 0;
+  }
+  return false;
+}
+
+// null means "every event" (owner); an empty array means the caller owns none.
+export async function visibleEventIds(user) {
+  if (user.role === 'owner') return null;
+  if (user.role === 'staff') return user.staffEvent ? [user.staffEvent.id] : [];
+  if (user.role === 'organizer') {
+    const [rows] = await pool.execute('SELECT id FROM events WHERE created_by = ?', [user.id]);
+    return rows.map((row) => row.id);
+  }
+  return [];
 }
 
 export function requireApproved(req, res, next) {

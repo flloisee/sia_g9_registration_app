@@ -6,26 +6,26 @@ let transportPromise;
 const timeouts = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 20_000 };
 
 async function createTransport() {
-  if (process.env.SMTP_HOST) {
-    const port = Number(process.env.SMTP_PORT ?? 587);
+  // Gmail app password: SMTP_USER is the full address, SMTP_PASS the 16-char
+  // app password from https://myaccount.google.com/apppasswords (2FA required).
+  if (process.env.SMTP_USER) {
+    const port = Number(process.env.SMTP_PORT ?? 465);
     return {
       transporter: nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
+        host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
         port,
         secure: process.env.SMTP_SECURE === 'true' || port === 465,
         ...timeouts,
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? '' }
-          : undefined,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? '' },
       }),
-      from: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? 'tickets@localhost',
+      from: process.env.MAIL_FROM ?? process.env.SMTP_USER,
     };
   }
 
   // No SMTP configured: fall back to a throwaway Ethereal inbox so the flow
   // can be verified locally. Every send prints a preview URL to the console.
   const account = await nodemailer.createTestAccount();
-  console.warn(`[mail] SMTP not configured — using Ethereal test inbox ${account.user}`);
+  console.warn(`[mail] SMTP_USER not set — using Ethereal test inbox ${account.user}`);
   return {
     transporter: nodemailer.createTransport({
       host: account.smtp.host,

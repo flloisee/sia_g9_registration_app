@@ -17,13 +17,31 @@ import {
   verifyPassword,
 } from './auth.js';
 import { pool } from './db.js';
-import { clean, EMAIL_RE, mysqlDateTime, rateLimit, toEvent, toIso } from './helpers.js';
+import {
+  appOrigin,
+  clean,
+  EMAIL_RE,
+  eventIsOpen,
+  mysqlDateTime,
+  rateLimit,
+  toEvent,
+  toIso,
+} from './helpers.js';
 import { sendEmailChangeEmail } from './mail.js';
 
 export const adminRouter = Router();
 
-const loginLimiter = rateLimit(10, 10 * 60_000);
+const loginIpLimiter = rateLimit(10, 10 * 60_000);
+const loginAccountLimiter = rateLimit(10, 10 * 60_000, (req) =>
+  clean(req.body?.email, 190).toLowerCase(),
+);
+const confirmEmailLimiter = rateLimit(20, 60_000);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// A missing account must cost the same as a wrong password.
+let dummyHashPromise;
+const getDummyHash = () =>
+  (dummyHashPromise ??= hashPassword('timing-equalizer-not-a-real-password'));
 
 function parseDate(value) {
   if (!value) return null;
@@ -89,7 +107,7 @@ async function findEvent(id, user) {
   return rows[0];
 }
 
-adminRouter.post('/login', loginLimiter, async (req, res) => {
+adminRouter.post('/login', loginIpLimiter, loginAccountLimiter, async (req, res) => {
   const email = clean(req.body?.email, 190).toLowerCase();
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
@@ -103,7 +121,9 @@ adminRouter.post('/login', loginLimiter, async (req, res) => {
     [email],
   );
   const user = rows[0];
-  if (!user || !user.is_active || !(await verifyPassword(password, user.password_hash))) {
+  const stored = user?.password_hash ?? (await getDummyHash());
+  const passwordOk = await verifyPassword(password, stored);
+  if (!user || !user.is_active || !passwordOk) {
     return res.status(401).json({ error: 'Email or password is incorrect.' });
   }
 
@@ -251,7 +271,7 @@ adminRouter.get('/volunteers', requireUser, requireAdmin, async (req, res) => {
 });
 
 // The new address proves ownership before the change applies.
-adminRouter.get('/volunteers/confirm-email', async (req, res) => {
+adminRouter.get('/volunteers/confirm-email', confirmEmailLimiter, async (req, res) => {
   const page = (status, title, message) =>
     res.status(status).type('html').send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Event Manager</title></head>
@@ -347,7 +367,7 @@ adminRouter.patch('/volunteers/:id', requireUser, requireAdmin, async (req, res)
       const mail = await sendEmailChangeEmail({
         to: email,
         name,
-        confirmUrl: `${req.protocol}://${req.get('host')}/api/admin/volunteers/confirm-email?token=${token}`,
+        confirmUrl: `${appOrigin(req)}/api/admin/volunteers/confirm-email?token=${token}`,
       });
       emailSent = true;
       emailPreviewUrl = mail.previewUrl;
@@ -408,8 +428,20 @@ adminRouter.patch('/staff-requests/:id', requireUser, requireAdmin, async (req, 
   if (req.user.role === 'organizer' && request.event_creator !== req.user.id) {
     return res.status(404).json({ error: 'Request not found.' });
   }
-  if (status === 'approved' && !request.staff_event_id) {
-    return res.status(400).json({ error: 'That event no longer exists. Reject the request instead.' });
+  if (status === 'approved') {
+    if (!request.staff_event_id) {
+      return res
+        .status(400)
+        .json({ error: 'That event no longer exists. Reject the request instead.' });
+    }
+    const [events] = await pool.execute('SELECT * FROM events WHERE id = ?', [
+      request.staff_event_id,
+    ]);
+    if (!events.length || !eventIsOpen(events[0])) {
+      return res
+        .status(400)
+        .json({ error: 'That event is no longer open. Reject the request instead.' });
+    }
   }
 
   await pool.execute('UPDATE users SET approval_status = ? WHERE id = ?', [status, id]);
@@ -439,8 +471,8 @@ adminRouter.post('/users', requireUser, requireOwner, async (req, res) => {
 
   if (name.length < 2) return res.status(400).json({ error: 'Enter the person’s name.' });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
+  if (password.length < 12 || password.length > 128) {
+    return res.status(400).json({ error: 'Use a password of 12 to 128 characters.' });
   }
 
   const id = randomUUID();

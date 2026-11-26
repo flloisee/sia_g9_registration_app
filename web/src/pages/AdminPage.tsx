@@ -1642,10 +1642,10 @@ function OrganizersTab({
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={12}
                   required
                 />
-                <p className="text-[12px] text-muted-foreground">At least 8 characters.</p>
+                <p className="text-[12px] text-muted-foreground">At least 12 characters.</p>
               </div>
               {error && (
                 <p role="alert" className="text-[13px] leading-relaxed text-destructive">
